@@ -1,0 +1,113 @@
+using module ".\converter.psm1"
+
+[CmdletBinding()]
+param (
+  [Parameter(Mandatory = $false)]
+  [ValidateScript({[System.IO.Path]::IsPathRooted($_)})]
+  [string]
+  $DataSetFolder,
+  [Parameter(Mandatory = $false)]
+  [ValidateScript({[System.IO.Path]::IsPathRooted($_)})]
+  [string]
+  $TargetFolder,
+  [Parameter(Mandatory = $false)]
+  [ValidateScript({[System.IO.Path]::IsPathRooted($_)})] # muss absolut sein, damit auch später noch darauf zugegriffen werden kann
+  [string]
+  $OpenPosePath,
+  [Parameter(Mandatory = $false)]
+  [int]
+  $Tracking = -1,
+  [Parameter(
+      Mandatory = $false, 
+      HelpMessage = "So ist dann der Basisname der Keypointsdateien"
+  )]
+  [string]
+  $ConfigName = "video",
+  [Parameter(Mandatory = $false)]
+  [int]
+  $ScaleNumber = 1,
+  [Parameter(Mandatory = $false)]
+  [int]
+  $HandScaleNumber = 1,
+  [Parameter(Mandatory = $false)]
+  [double]
+  $ScaleGap = .25d,
+  [Parameter(Mandatory = $false)]
+  [double]
+  $HandScaleGap = .4d,
+  [Parameter(Mandatory = $false)]
+  [string[]]
+  $Include,
+  [Parameter(Mandatory = $false)]
+  [int]
+  $NetHeight = 368,
+  [Parameter(Mandatory = $false)]
+  [string]
+  $HandNetResolution = "368x368",
+  [string]
+  $FaceNetResolution = "368x368",
+  [Parameter(Mandatory = $false)]
+  [switch]
+  $Hand,
+  [Parameter(Mandatory = $false)]
+  [switch]
+  $Face,
+  [Parameter(Mandatory = $false)]
+  [switch]
+  $Body,
+  [Parameter(Mandatory = $false)]
+  [int]
+  $MaxTries = 2,
+  [Parameter(Mandatory = $false)]
+  [string]
+  $ContinueMode,
+  [Parameter(Mandatory = $false)]
+  [switch]
+  $ShutDownAfter
+)
+process {
+  $dataFolderPresent = ![string]::IsNullOrEmpty($DataSetFolder)
+  $targetFolderPresent = ![string]::IsNullOrEmpty($TargetFolder)
+  $continueModePresent = ![string]::IsNullOrEmpty($ContinueMode)
+
+  if ($dataFolderPresent -and $targetFolderPresent -and !$continueModePresent) {
+    [hashtable] $converterArgs = @{
+      "Body" = $Body.IsPresent;
+      "Face" = $Face.IsPresent;
+      "Hands" = $Body.IsPresent;
+      "Tracking" = $Tracking;
+      "NumberPeopleMax" = $NumberPeopleMax;
+      "ModeName" = $ConfigName;
+      "ScaleNumber" = $ScaleNumber;
+      "ScaleGap" = $ScaleGap;
+      "HandScaleNumber" = $HandScaleNumber;
+      "HandScaleGap" = $HandScaleGap;
+      "IncludedCategories" = $Include;
+      "NetHeight" = $NetHeight;
+      "HandNetResolution" = $HandNetResolution;
+      "FaceNetResolution" = $FaceNetResolution;
+      "MaxTries" = $MaxTries;
+      "OpenPosePath" = $OpenPosePath;
+      "DatasetPath" = $DataSetFolder;
+      "OutputPath" = $TargetFolder;
+    };
+    
+    [OpenPoseVideoConverter] $converter = [OpenPoseVideoConverter]::new($converterArgs);
+    $converter.ConvertDataset();
+
+    if ($ShutDownAfter.IsPresent) {
+      Stop-Computer -ComputerName 'localhost'
+    }
+  }
+
+  if (!$dataFolderPresent -and !$targetFolderPresent -and $continueModePresent) {
+    [OpenPoseVideoConverter] $converter =[OpenPoseVideoConverter]::continueFrom($ContinueMode)
+    $converter.ConvertDataset();
+
+    if ($ShutDownAfter.IsPresent) {
+      Stop-Computer -ComputerName 'localhost'
+    }
+  }
+
+  throw "Either set DataFolder and TargetFolder or ContinueMode";
+}
