@@ -2,7 +2,7 @@ class OpenPoseVideoConverter {
 
   [bool] $Body;
   [bool] $Face;
-  [bool] $Hands;
+  [bool] $Hand;
   [int] $Tracking;
   [int] $NumberPeopleMax;
   [string] $ModeName;
@@ -10,7 +10,7 @@ class OpenPoseVideoConverter {
   [double] $ScaleGap;
   [int] $HandScaleNumber;
   [double] $HandScaleGap;
-  [string[]] $IncludedCategories;
+  [string[]] $Include;
   [int] $NetHeight;
   [string] $HandNetResolution;
   [string] $FaceNetResolution;
@@ -132,8 +132,7 @@ class OpenPoseVideoConverter {
       
       $openpose_args += "--tracking";
       $openpose_args += $this.Tracking;
-      
-      $numpeople = $this.Tracking ? 1 : $this.NumberPeopleMax;
+      $numpeople = $this.Tracking -gt -1 ? 1 : $this.NumberPeopleMax ;
       $openpose_args += "--number_people_max";
       $openpose_args += $numpeople;
       $tries = 0;
@@ -199,7 +198,7 @@ class OpenPoseVideoConverter {
     Write-Host "Converting Videos in $($this.DatasetPath)";
     Write-Host "Basename: $($this.ModeName)";
 
-    $dirs = $this.IncludedCategories ?? ((Get-ChildItem -LiteralPath $this.DatasetPath -Directory) | Where-Object -FilterScript { $_ -ne $this.TempFolderName });
+    $dirs = $this.Include ?? ((Get-ChildItem -LiteralPath $this.DatasetPath -Directory) | Where-Object -FilterScript { $_ -ne $this.TempFolderName });
     
     foreach ($dir in $dirs) {
       $this.ConvertVideos($dir);
@@ -235,9 +234,14 @@ class OpenPoseVideoConverter {
   }
 
   [void] hidden ReadConfig([string] $mode) {
-    $confPath = Join-Path -Path $this.ConfigurationsDir -ChildPath $mode -AdditionalChildPath $this.ConfigurationsFileName;
-    [hashtable] $configTable = Get-Content $confPath | ConvertFrom-Json -AsHashtable;
-    $this.ReadConfig($configTable);
+    if (Test-Path -LiteralPath $mode) {
+      $content = Get-Content -LiteralPath $mode -Raw;
+      [hashtable] $configTable = $content | ConvertFrom-Json -AsHashtable;
+      $this.ReadConfig($configTable); 
+    }
+    else {
+      throw "Config file does not exist.";
+    }
   }
 
   [void] hidden ReadConfig([hashtable] $config) {
@@ -245,7 +249,14 @@ class OpenPoseVideoConverter {
 
     foreach ($key in $config.Keys) {
       Write-Host $key
-      $ownType.GetProperty($key).SetValue($this, $config[$key]);
+      if ($null -ne $config[$key]) {
+        if ($config[$key].GetType() -eq [long]) {
+          $ownType.GetProperty($key).SetValue($this, [int] $config[$key]);
+        }
+        else {
+          $ownType.GetProperty($key).SetValue($this, $config[$key]);
+        }
+      }
     }
   }
 

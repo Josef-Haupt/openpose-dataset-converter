@@ -1,28 +1,28 @@
-using module ".\converter.psm1"
+Using module ".\converter.psm1"
 
 [CmdletBinding()]
 param (
   [Parameter(Mandatory = $false)]
-  [ValidateScript({[System.IO.Path]::IsPathRooted($_)})]
+  [ValidateScript( { [System.IO.Path]::IsPathRooted($_) })]
   [string]
-  $DataSetFolder,
+  $DatasetPath,
   [Parameter(Mandatory = $false)]
-  [ValidateScript({[System.IO.Path]::IsPathRooted($_)})]
+  [ValidateScript( { [System.IO.Path]::IsPathRooted($_) })]
   [string]
-  $TargetFolder,
+  $OutputPath,
   [Parameter(Mandatory = $false)]
-  [ValidateScript({[System.IO.Path]::IsPathRooted($_)})] # muss absolut sein, damit auch später noch darauf zugegriffen werden kann
+  [ValidateScript( { [System.IO.Path]::IsPathRooted($_) })] # muss absolut sein, damit auch später noch darauf zugegriffen werden kann
   [string]
   $OpenPosePath,
   [Parameter(Mandatory = $false)]
   [int]
   $Tracking = -1,
   [Parameter(
-      Mandatory = $false, 
-      HelpMessage = "So ist dann der Basisname der Keypointsdateien"
+    Mandatory = $false, 
+    HelpMessage = "So ist dann der Basisname der Keypointsdateien"
   )]
   [string]
-  $ConfigName = "video",
+  $ModeName = "video",
   [Parameter(Mandatory = $false)]
   [int]
   $ScaleNumber = 1,
@@ -58,39 +58,53 @@ param (
   [Parameter(Mandatory = $false)]
   [int]
   $MaxTries = 2,
-  [Parameter(Mandatory = $false)]
+  [Parameter(Mandatory = $false, HelpMessage="Path to config file.")]
   [string]
-  $ContinueMode,
+  $Continue,
   [Parameter(Mandatory = $false)]
   [switch]
   $ShutDownAfter
 )
 process {
-  $dataFolderPresent = ![string]::IsNullOrEmpty($DataSetFolder)
-  $targetFolderPresent = ![string]::IsNullOrEmpty($TargetFolder)
-  $continueModePresent = ![string]::IsNullOrEmpty($ContinueMode)
+  $dataFolderPresent = ![string]::IsNullOrEmpty($DatasetPath)
+  $targetFolderPresent = ![string]::IsNullOrEmpty($OutputPath)
+  $continueModePresent = ![string]::IsNullOrEmpty($Continue)
 
   if ($dataFolderPresent -and $targetFolderPresent -and !$continueModePresent) {
-    [hashtable] $converterArgs = @{
-      "Body" = $Body.IsPresent;
-      "Face" = $Face.IsPresent;
-      "Hands" = $Body.IsPresent;
-      "Tracking" = $Tracking;
-      "NumberPeopleMax" = $NumberPeopleMax;
-      "ModeName" = $ConfigName;
-      "ScaleNumber" = $ScaleNumber;
-      "ScaleGap" = $ScaleGap;
-      "HandScaleNumber" = $HandScaleNumber;
-      "HandScaleGap" = $HandScaleGap;
-      "IncludedCategories" = $Include;
-      "NetHeight" = $NetHeight;
-      "HandNetResolution" = $HandNetResolution;
-      "FaceNetResolution" = $FaceNetResolution;
-      "MaxTries" = $MaxTries;
-      "OpenPosePath" = $OpenPosePath;
-      "DatasetPath" = $DataSetFolder;
-      "OutputPath" = $TargetFolder;
-    };
+    [hashtable] $converterArgs = @{};
+    $exludedParams = @("Continue", "ShutDownAfter");
+
+    foreach ($paramName in $MyInvocation.MyCommand.Parameters.Values) {
+      if ($paramName.Name -notin $exludedParams) {
+        try {
+          $param = Get-Variable $paramName.Name -ErrorAction Stop
+          $value = $param.Value.GetType() -eq [System.Management.Automation.SwitchParameter] ? $param.Value.IsPresent : $param.Value;
+          $converterArgs.Add($paramName.Name, $value);
+        }
+        catch { }
+      }
+    } 
+
+    # [hashtable] $converterArgs = @{
+    #   "Body" = $Body.IsPresent;
+    #   "Face" = $Face.IsPresent;
+    #   "Hands" = $Body.IsPresent;
+    #   "Tracking" = $Tracking;
+    #   "NumberPeopleMax" = $NumberPeopleMax;
+    #   "ModeName" = $ModeName;
+    #   "ScaleNumber" = $ScaleNumber;
+    #   "ScaleGap" = $ScaleGap;
+    #   "HandScaleNumber" = $HandScaleNumber;
+    #   "HandScaleGap" = $HandScaleGap;
+    #   "Include" = $Include;
+    #   "NetHeight" = $NetHeight;
+    #   "HandNetResolution" = $HandNetResolution;
+    #   "FaceNetResolution" = $FaceNetResolution;
+    #   "MaxTries" = $MaxTries;
+    #   "OpenPosePath" = $OpenPosePath;
+    #   "DatasetPath" = $DatasetPath;
+    #   "OutputPath" = $OutputPath;
+    # };
     
     [OpenPoseVideoConverter] $converter = [OpenPoseVideoConverter]::new($converterArgs);
     $converter.ConvertDataset();
@@ -101,7 +115,7 @@ process {
   }
 
   if (!$dataFolderPresent -and !$targetFolderPresent -and $continueModePresent) {
-    [OpenPoseVideoConverter] $converter =[OpenPoseVideoConverter]::continueFrom($ContinueMode)
+    [OpenPoseVideoConverter] $converter = [OpenPoseVideoConverter]::continueFrom($Continue)
     $converter.ConvertDataset();
 
     if ($ShutDownAfter.IsPresent) {
